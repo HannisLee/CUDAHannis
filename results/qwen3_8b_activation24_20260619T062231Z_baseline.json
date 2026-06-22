@@ -1,0 +1,132 @@
+{
+  "created_at": "2026-06-19T06:50:25.046475+00:00",
+  "hostname": "shiva",
+  "variant": "baseline",
+  "model_id": "Qwen/Qwen3-8B",
+  "resolved_model_path": "Qwen/Qwen3-8B",
+  "tasks": [
+    "hellaswag",
+    "piqa",
+    "winogrande",
+    "arc_challenge",
+    "arc_easy",
+    "boolq"
+  ],
+  "batch_size": "auto",
+  "limit": null,
+  "dtype": "float16",
+  "total_wall_time_sec": 1359.8554767817259,
+  "environment": {
+    "python": "3.11.15 | packaged by conda-forge | (main, Jun 11 2026, 03:34:02) [GCC 14.3.0]",
+    "torch": "2.7.1+cu118",
+    "torch_cuda": "11.8",
+    "transformers": "5.12.0",
+    "triton": "3.3.1",
+    "hf_home": "/mnt/workspace/users/han.li/hf_home",
+    "hf_hub_cache": "/mnt/workspace/users/han.li/hf_home/hub",
+    "gpu": {
+      "cuda_available": true,
+      "cuda_visible_devices": "0",
+      "device_count": 1,
+      "device_name": "NVIDIA RTX A6000",
+      "capability": [
+        8,
+        6
+      ],
+      "memory_total_bytes": 50936283136
+    }
+  },
+  "operator_benchmark_config": {
+    "warmup": 5,
+    "repeat": 20,
+    "max_shapes": 0
+  },
+  "results": [
+    {
+      "task": "hellaswag",
+      "wall_time_sec": 774.7673787288368,
+      "metrics": {
+        "name": "hellaswag",
+        "alias": "hellaswag",
+        "sample_len": 10042,
+        "acc,none": 0.5714997012547302,
+        "acc_stderr,none": 0.004938500303990283,
+        "acc_norm,none": 0.749452300338578,
+        "acc_norm_stderr,none": 0.004324428538963649
+      },
+      "shape_histogram": {},
+      "operator_benchmarks": {}
+    },
+    {
+      "task": "piqa",
+      "wall_time_sec": 93.34308001771569,
+      "metrics": {
+        "name": "piqa",
+        "alias": "piqa",
+        "sample_len": 1838,
+        "acc,none": 0.7676822633297062,
+        "acc_stderr,none": 0.009853201384168241,
+        "acc_norm,none": 0.7769314472252449,
+        "acc_norm_stderr,none": 0.009713057213018544
+      },
+      "shape_histogram": {},
+      "operator_benchmarks": {}
+    },
+    {
+      "task": "winogrande",
+      "wall_time_sec": 41.99170529469848,
+      "metrics": {
+        "name": "winogrande",
+        "alias": "winogrande",
+        "sample_len": 1267,
+        "acc,none": 0.6779794790844514,
+        "acc_stderr,none": 0.013132070202071067
+      },
+      "shape_histogram": {},
+      "operator_benchmarks": {}
+    },
+    {
+      "task": "arc_challenge",
+      "wall_time_sec": 73.34516588971019,
+      "metrics": {
+        "name": "arc_challenge",
+        "alias": "arc_challenge",
+        "sample_len": 1172,
+        "acc,none": 0.5580204778156996,
+        "acc_stderr,none": 0.014512682523128343,
+        "acc_norm,none": 0.5639931740614335,
+        "acc_norm_stderr,none": 0.014491225699230916
+      },
+      "shape_histogram": {},
+      "operator_benchmarks": {}
+    },
+    {
+      "task": "arc_easy",
+      "wall_time_sec": 96.47390745952725,
+      "metrics": {
+        "name": "arc_easy",
+        "alias": "arc_easy",
+        "sample_len": 2376,
+        "acc,none": 0.835016835016835,
+        "acc_stderr,none": 0.00761615237174269,
+        "acc_norm,none": 0.8089225589225589,
+        "acc_norm_stderr,none": 0.008067265958015948
+      },
+      "shape_histogram": {},
+      "operator_benchmarks": {}
+    },
+    {
+      "task": "boolq",
+      "wall_time_sec": 279.3788747526705,
+      "metrics": {
+        "name": "boolq",
+        "alias": "boolq",
+        "sample_len": 3270,
+        "acc,none": 0.8657492354740061,
+        "acc_stderr,none": 0.005962755227936343
+      },
+      "shape_histogram": {},
+      "operator_benchmarks": {}
+    }
+  ]
+}
