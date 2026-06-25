@@ -10,3 +10,6 @@ profiles/
 build/
 dist/
 *.egg-info/
+
+# Generated evaluation outputs
+results/

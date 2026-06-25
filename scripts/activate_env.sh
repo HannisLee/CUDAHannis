@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-ENV_NAME="triton-cu118"
+ENV_NAME="vllm-cu129"
 
 if ! command -v conda >/dev/null 2>&1; then
   if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
@@ -23,13 +23,35 @@ fi
 
 conda activate "$ENV_NAME" || return 1 2>/dev/null || exit 1
 
-if [ -n "${CONDA_PREFIX:-}" ] && [ -x "$CONDA_PREFIX/bin/nvcc" ]; then
-  export CUDA_HOME="$CONDA_PREFIX"
+# nvcc is pip-installed (nvidia-cuda-nvcc) under site-packages/nvidia/cu13,
+# not at $CONDA_PREFIX/bin/nvcc. Locate it and point CUDA_HOME at it so
+# torch.utils.cpp_extension picks up the nvcc matching torch's CUDA build.
+if [ -n "${CONDA_PREFIX:-}" ]; then
+  PIP_CUDA_HOME="$("$CONDA_PREFIX/bin/python" - <<'PY'
+import os
+try:
+    import nvidia
+except ImportError:
+    raise SystemExit
+for root in nvidia.__path__:
+    for sub in sorted(os.listdir(root)):
+        cand = os.path.join(root, sub)
+        if os.path.exists(os.path.join(cand, "bin", "nvcc")):
+            print(cand)
+            raise SystemExit
+PY
+)"
+  if [ -n "$PIP_CUDA_HOME" ]; then
+    export CUDA_HOME="$PIP_CUDA_HOME"
+  fi
 fi
 
-if [ -n "${CONDA_PREFIX:-}" ] && [ -x "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc" ] && [ -x "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++" ]; then
-  export CC="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc"
-  export CXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
+# vllm-cu129 ships no conda gcc/g++; use the system compiler as host compiler.
+if command -v gcc >/dev/null 2>&1; then
+  export CC="$(command -v gcc)"
+fi
+if command -v g++ >/dev/null 2>&1; then
+  export CXX="$(command -v g++)"
 fi
 
 HOST_SHORT="$(hostname -s 2>/dev/null || hostname)"

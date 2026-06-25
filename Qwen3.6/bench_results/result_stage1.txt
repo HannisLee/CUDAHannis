@@ -1,0 +1,65 @@
+====================================================================================================
+vLLM Benchmark 测试记录
+====================================================================================================
+测试时间: 20260625_002058
+BASE_URL: http://localhost:8081
+ENDPOINT: /v1/completions
+MODEL_PATH: /mnt/workspace/users/han.li/models/Qwen--Qwen3.6-35B-A3B
+SERVED_MODEL_NAME: qwen36-35b-a3b
+RUN_CASES: ['normal', 'prefill', 'decode']
+RESULT_DIR: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results
+
+====================================================================================================
+测试 1: 常规聊天负载
+====================================================================================================
+命令:
+vllm bench serve --backend vllm --model /mnt/workspace/users/han.li/models/Qwen--Qwen3.6-35B-A3B --served-model-name qwen36-35b-a3b --base-url http://localhost:8081 --endpoint /v1/completions --dataset-name random --random-input-len 512 --random-output-len 128 --num-prompts 200 --request-rate 4 --result-dir /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results --result-filename qwen36_35b_single_20260625_002058_normal_512in_128out_qps4.json --save-result --trust-remote-code
+
+耗时: 110.58 秒
+返回码: 0
+JSON 文件: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results/qwen36_35b_single_20260625_002058_normal_512in_128out_qps4.json
+JSON 是否存在: True
+
+====================================================================================================
+测试 2: 长输入 Prefill 测试
+====================================================================================================
+命令:
+vllm bench serve --backend vllm --model /mnt/workspace/users/han.li/models/Qwen--Qwen3.6-35B-A3B --served-model-name qwen36-35b-a3b --base-url http://localhost:8081 --endpoint /v1/completions --dataset-name random --random-input-len 8192 --random-output-len 128 --num-prompts 100 --request-rate 2 --result-dir /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results --result-filename qwen36_35b_single_20260625_002058_prefill_8192in_128out_qps2.json --save-result --trust-remote-code
+
+耗时: 86.42 秒
+返回码: 0
+JSON 文件: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results/qwen36_35b_single_20260625_002058_prefill_8192in_128out_qps2.json
+JSON 是否存在: True
+
+====================================================================================================
+测试 3: 长输出 Decode 测试
+====================================================================================================
+命令:
+vllm bench serve --backend vllm --model /mnt/workspace/users/han.li/models/Qwen--Qwen3.6-35B-A3B --served-model-name qwen36-35b-a3b --base-url http://localhost:8081 --endpoint /v1/completions --dataset-name random --random-input-len 512 --random-output-len 1024 --num-prompts 100 --request-rate 2 --result-dir /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results --result-filename qwen36_35b_single_20260625_002058_decode_512in_1024out_qps2.json --save-result --trust-remote-code
+
+耗时: 140.82 秒
+返回码: 0
+JSON 文件: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results/qwen36_35b_single_20260625_002058_decode_512in_1024out_qps2.json
+JSON 是否存在: True
+
+====================================================================================================
+测试统一汇总
+====================================================================================================
+测试 1: 常规聊天负载
+运行状态: 成功
+耗时: 110.58 秒
+JSON 状态: 已保存
+JSON 路径: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results/qwen36_35b_single_20260625_002058_normal_512in_128out_qps4.json
+
+测试 2: 长输入 Prefill 测试
+运行状态: 成功
+耗时: 86.42 秒
+JSON 状态: 已保存
+JSON 路径: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results/qwen36_35b_single_20260625_002058_prefill_8192in_128out_qps2.json
+
+测试 3: 长输出 Decode 测试
+运行状态: 成功
+耗时: 140.82 秒
+JSON 状态: 已保存
+JSON 路径: /home/han.li/Code/CUDAHannis/Qwen3.6/bench_results/qwen36_35b_single_20260625_002058_decode_512in_1024out_qps2.json
+

@@ -31,7 +31,7 @@ nsys --version
 ## 2. 先跑通 benchmark
 
 ```bash
-python benchmarks/bench_vector_add.py
+python -m eval.benchmarks.benchmark_vector_add
 ```
 
 第一次运行 CUDA extension 或 Triton kernel 时会发生编译/JIT，时间线里会混入编译开销。正式 profiling 前建议先普通运行一次，让缓存生成完。
@@ -48,7 +48,7 @@ nsys profile \
   --sample=none \
   --cpuctxsw=none \
   --output=profiles/vector_add_nsys \
-  python benchmarks/bench_vector_add.py
+  python -m eval.benchmarks.benchmark_vector_add
 ```
 
 常用参数说明：
@@ -122,7 +122,7 @@ torch.cuda.nvtx.range_pop()
 ```bash
 bash scripts/check_env.sh
 source scripts/activate_env.sh
-python benchmarks/bench_vector_add.py
+python -m eval.benchmarks.benchmark_vector_add
 ```
 
 不要假设另一台服务器的 driver、CUDA toolkit、`nvcc`、`nsys` 或 `ncu` 版本和 `shiva` 相同。
