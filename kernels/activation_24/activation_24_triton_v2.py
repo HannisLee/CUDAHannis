@@ -1,8 +1,33 @@
+"""Activation 2:4 sparsity — Triton version2。
+
+对应 OPTIMIZATION.md 的 version2：在 version1 通用 masked kernel 的基础上，
+为 aligned shape 增加 full-block fast path，去掉 mask 和尾部处理开销。
+
+改动要点：
+- 当 last_dim % 4 == 0 且 groups_per_row % block_groups == 0（block 内全是完整
+  4 元组、无尾块）时，走无 mask 的 full kernel：load/store 不带 mask，也不需要
+  把无效 lane 置 -inf。
+- 否则 fallback 回 version1 的 masked group kernel，保留对不规则 shape 的支持。
+- block_groups 默认从 256 调到 64，让每个 program 处理更少 group、增加 program 数，
+  改善当前 shape 下的调度粒度。
+
+tie-break 仍按低 lane 优先（`>` 与 `>=` 组合），与 PyTorch reference 完全一致。
+本文件为独立 top-level 模块，校验逻辑内联，不依赖包内相对导入。
+"""
+
 import torch
 import triton
 import triton.language as tl
 
-from .activation_24_common import validate_input
+
+def _validate_input(x: torch.Tensor) -> None:
+    # 与 activation_24_common.validate_input 保持一致
+    if not x.is_cuda:
+        raise RuntimeError("activation 2:4 sparsity expects a CUDA tensor.")
+    if x.dtype not in (torch.float16, torch.float32):
+        raise TypeError(f"activation 2:4 sparsity supports float16/float32, got {x.dtype}.")
+    if x.dim() == 0:
+        raise ValueError("activation 2:4 sparsity expects at least 1 dimension.")
 
 
 @triton.jit
@@ -50,38 +75,6 @@ def _activation_24_sparsity_kernel(
 
 
 @triton.jit
-def _activation_24_sparsity_contiguous_kernel(
-    x_ptr,
-    out_ptr,
-    BLOCK_SIZE: tl.constexpr,
-):
-    pid = tl.program_id(axis=0)
-    local_offsets = tl.arange(0, BLOCK_SIZE)
-    offsets = pid * BLOCK_SIZE + local_offsets
-    lane = local_offsets & 3
-    group_base = offsets - lane
-
-    v0 = tl.load(x_ptr + group_base)
-    v1 = tl.load(x_ptr + group_base + 1)
-    v2 = tl.load(x_ptr + group_base + 2)
-    v3 = tl.load(x_ptr + group_base + 3)
-    v = tl.where(lane == 0, v0, tl.where(lane == 1, v1, tl.where(lane == 2, v2, v3)))
-
-    a0 = tl.abs(v0)
-    a1 = tl.abs(v1)
-    a2 = tl.abs(v2)
-    a3 = tl.abs(v3)
-
-    a = tl.where(lane == 0, a0, tl.where(lane == 1, a1, tl.where(lane == 2, a2, a3)))
-    rank = ((a0 > a) | ((a0 == a) & (lane > 0))).to(tl.int32)
-    rank += ((a1 > a) | ((a1 == a) & (lane > 1))).to(tl.int32)
-    rank += ((a2 > a) | ((a2 == a) & (lane > 2))).to(tl.int32)
-    rank += (a3 > a).to(tl.int32)
-
-    tl.store(out_ptr + offsets, tl.where(rank < 2, v, 0.0))
-
-
-@triton.jit
 def _activation_24_sparsity_full_kernel(
     x_ptr,
     out_ptr,
@@ -97,6 +90,7 @@ def _activation_24_sparsity_full_kernel(
     elem2 = elem0 + 2
     elem3 = elem0 + 3
 
+    # full-block fast path：block 内全是完整 4 元组，无 mask、无尾块
     v0 = tl.load(x_ptr + row_base + elem0)
     v1 = tl.load(x_ptr + row_base + elem1)
     v2 = tl.load(x_ptr + row_base + elem2)
@@ -119,7 +113,7 @@ def _activation_24_sparsity_full_kernel(
 
 
 def activation_24_sparsity_triton(x: torch.Tensor, block_groups: int = 64) -> torch.Tensor:
-    validate_input(x)
+    _validate_input(x)
     if not x.is_contiguous():
         x = x.contiguous()
 
@@ -128,33 +122,78 @@ def activation_24_sparsity_triton(x: torch.Tensor, block_groups: int = 64) -> to
     if last_dim == 0:
         return out
 
-    contiguous_block_size = 256 if x.dtype == torch.float16 else 512
-    contiguous_num_warps = 4 if x.dtype == torch.float16 else 2
-    if last_dim % 4 == 0 and x.numel() % contiguous_block_size == 0:
-        _activation_24_sparsity_contiguous_kernel[(x.numel() // contiguous_block_size,)](
+    rows = x.numel() // last_dim
+    groups_per_row = triton.cdiv(last_dim, 4)
+    grid = (rows, triton.cdiv(groups_per_row, block_groups))
+
+    if last_dim % 4 == 0 and groups_per_row % block_groups == 0:
+        # aligned 且 block 内无尾块：走无 mask 的 full-block fast path
+        _activation_24_sparsity_full_kernel[grid](
             x,
             out,
-            BLOCK_SIZE=contiguous_block_size,
-            num_warps=contiguous_num_warps,
+            last_dim,
+            BLOCK_GROUPS=block_groups,
+            num_warps=2,
         )
     else:
-        rows = x.numel() // last_dim
-        groups_per_row = triton.cdiv(last_dim, 4)
-        grid = (rows, triton.cdiv(groups_per_row, block_groups))
-        if last_dim % 4 == 0 and groups_per_row % block_groups == 0:
-            _activation_24_sparsity_full_kernel[grid](
-                x,
-                out,
-                last_dim,
-                BLOCK_GROUPS=block_groups,
-                num_warps=2,
-            )
-        else:
-            _activation_24_sparsity_kernel[grid](
-                x,
-                out,
-                last_dim,
-                groups_per_row,
-                BLOCK_GROUPS=block_groups,
-            )
+        # 不规则 shape：fallback 回 version1 的 masked group kernel
+        _activation_24_sparsity_kernel[grid](
+            x,
+            out,
+            last_dim,
+            groups_per_row,
+            BLOCK_GROUPS=block_groups,
+        )
     return out
+
+
+def main():
+    import time
+    import torch
+
+    torch.manual_seed(0)
+    device = "cuda"
+
+    # 单个测试 tensor：last_dim % 4 == 0 且 groups_per_row % 64 == 0，会走 full-block fast path
+    shape = (4096, 4096)
+    dtype = torch.float16
+
+    x = torch.randn(shape, device=device, dtype=dtype)
+
+    # 预热：触发 CUDA 初始化 + Triton JIT 编译
+    for _ in range(10):
+        y = activation_24_sparsity_triton(x)
+
+    torch.cuda.synchronize()
+
+    # 正式性能测试
+    iters = 100
+    start = time.perf_counter()
+
+    for _ in range(iters):
+        y = activation_24_sparsity_triton(x)
+
+    torch.cuda.synchronize()
+    end = time.perf_counter()
+
+    avg_ms = (end - start) * 1000 / iters
+
+    print(f"shape: {shape}")
+    print(f"dtype: {dtype}")
+    print(f"avg latency: {avg_ms:.4f} ms")
+
+    # NCU 精准采集区：只采这一发 kernel
+    torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStart()
+
+    for _ in range(1000):
+        y = activation_24_sparsity_triton(x)
+
+    torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStop()
+
+    print("NCU capture kernel finished.")
+
+
+if __name__ == "__main__":
+    main()
