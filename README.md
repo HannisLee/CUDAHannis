@@ -7,6 +7,8 @@ CUDAHannis 是一个用于学习、实现和验证自定义算子的项目，重
 - vector add：Triton、CUDA extension。
 - vector sub：Triton、CUDA extension。
 - activation 2:4 sparsity：PyTorch reference、Triton、CUDA extension。
+- sigmoid：PyTorch reference、Triton、CUDA extension。
+- sum reduction：PyTorch reference、Triton、CUDA extension。
 - NVFP4-style quantization：PyTorch reference、Triton、CUDA extension。
 - fake-FP8 causal FlashAttention forward：PyTorch reference、Triton、CUDA extension。
 
@@ -33,12 +35,19 @@ CUDAHannis 是一个用于学习、实现和验证自定义算子的项目，重
 | ✔️ rms_norm_f16x8_f32 | f16 |
 | ✔️ rms_norm_f16x8_pack_f32 | f16 |
 | ✔️ rms_norm_f16_f32 | f16 |
+| ✔️ sigmoid_f16 | f16 |
+| ✔️ sigmoid_f16x8 | f16 |
+| ✔️ sigmoid_f16x8_pack | f16 |
+| ✔️ sum_v1 | f32 |
+| ✔️ sum_v2 | f32 |
+| ✔️ sum_v3 | f32 |
+| ✔️ sum_v4 | f32 |
 
 ## Benchmark 结果
 
-以下结果来自 `kernels/a01_vector_add/results.txt`、`kernels/a02_vector_sub/results.txt`、`kernels/a03_activation_24/results.txt` 和 `kernels/a04_rms_norm/results.txt`。
+以下结果来自 `kernels/a01_vector_add/results.txt`、`kernels/a02_vector_sub/results.txt`、`kernels/a03_activation_24/results.txt`、`kernels/a04_rms_norm/results.txt`、`kernels/a07_sigmoid/results.txt` 和 `kernels/a08_sum/results.txt`。
 
-这些 benchmark 主要用于观察不同实现路径在固定 shape 下的延迟差异，并快速检查输出是否一致。整体来看，vector add/sub 这类纯 memory-bound elementwise 算子中，Triton、PyTorch 和简单 CUDA extension 的延迟非常接近；pack 或向量化版本在部分 shape 上略有优势。activation 2:4 sparsity 的 CUDA/Triton 实现相比 PyTorch reference 有明显加速，且 `max_abs=0`、`kept=0.5000` 表明结果与 reference 一致。RMSNorm 中，f16 输入使用 f32 累加可以避免大 K 场景下的 f16 overflow，`f16x8_pack` 系列在大 shape 上表现更稳定。
+这些 benchmark 主要用于观察不同实现路径在固定 shape 下的延迟差异，并快速检查输出是否一致。整体来看，vector add/sub 这类纯 memory-bound elementwise 算子中，Triton、PyTorch 和简单 CUDA extension 的延迟非常接近；pack 或向量化版本在部分 shape 上略有优势。activation 2:4 sparsity 的 CUDA/Triton 实现相比 PyTorch reference 有明显加速，且 `max_abs=0`、`kept=0.5000` 表明结果与 reference 一致。RMSNorm 中，f16 输入使用 f32 累加可以避免大 K 场景下的 f16 overflow，`f16x8_pack` 系列在大 shape 上表现更稳定。sigmoid 的向量化 CUDA 与 Triton 路径和 PyTorch 延迟接近，fp16 输出最大误差约为 `4.883e-04`。sum reduction 中，逐元素全局 `atomicAdd` 的 `sum_v1` 明显较慢，warp/block 规约和 `float4` 读取版本更接近 PyTorch/Triton 的延迟。
 
 ### a01_vector_add
 
@@ -281,6 +290,30 @@ CUDAHannis 是一个用于学习、实现和验证自定义算子的项目，重
      out_f16x8f32: ['0.07440186  ', '-0.95214844 ', '0.01576233  '], time:0.33396292ms
  out_f16x8packf16: ['0.07440186  ', '-0.95214844 ', '0.01576233  '], time:0.29863858ms
  out_f16x8packf32: ['0.07440186  ', '-0.95214844 ', '0.01576233  '], time:0.29865313ms
-       out_f16_th: ['0.07440186  ', '-0.95214844 ', '0.01576233  '], time:1.06043911ms
+     out_f16_th: ['0.07440186  ', '-0.95214844 ', '0.01576233  '], time:1.06043911ms
 -------------------------------------------------------------------------------------
 ```
+
+### a07_sigmoid
+
+完整输出见 `kernels/a07_sigmoid/results.txt`。以下为每个 shape 中主要实现的延迟摘要，单位为 ms。
+
+| Shape | torch | f16 | f16x8 | f16x8_pack | triton | max_abs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4096x512 | 0.01129363 | 0.01366665 | 0.00916062 | 0.00938406 | 0.01291644 | 4.883e-04 |
+| 4096x1024 | 0.02099489 | 0.03614181 | 0.02052204 | 0.02063214 | 0.02057587 | 4.883e-04 |
+| 4096x2048 | 0.04013416 | 0.04661263 | 0.03901708 | 0.03920933 | 0.03916700 | 4.883e-04 |
+| 4096x4096 | 0.07720426 | 0.09106254 | 0.07571516 | 0.07627705 | 0.07604074 | 4.883e-04 |
+| 4096x8192 | 0.15094839 | 0.17631662 | 0.14998780 | 0.15056026 | 0.15007334 | 4.883e-04 |
+
+### a08_sum
+
+完整输出见 `kernels/a08_sum/results.txt`。`sum_v1` 使用每元素全局 `atomicAdd`，benchmark 中单独使用 `iters=10`；其他实现使用 `iters=100`。
+
+| Shape | torch | v1 | v2 | v3 | v4 | triton |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4096x512 | 0.01530097 | 3.47130250 | 0.02888352 | 0.01746334 | 0.01279195 | 0.05288825 |
+| 4096x1024 | 0.02400474 | 6.93783720 | 0.05348507 | 0.03107473 | 0.02154411 | 0.05086244 |
+| 4096x2048 | 0.04142580 | 13.51017010 | 0.09761085 | 0.05497749 | 0.03884294 | 0.05209496 |
+| 4096x4096 | 0.07613867 | 26.22011730 | 0.19120885 | 0.10618507 | 0.07381731 | 0.07664883 |
+| 4096x8192 | 0.16181348 | 52.43447490 | 0.37838473 | 0.20855838 | 0.14364662 | 0.14697498 |
