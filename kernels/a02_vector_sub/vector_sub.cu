@@ -18,8 +18,62 @@
 #define LDST128BITS(value) (reinterpret_cast<float4 *>(&(value))[0])
 
 
+__global__ void vector_sub_fp32_kernal(float *a,float *b,float* c,int N){
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int idx = bid*blockDim.x+tid;
+  if(idx<N){
+    c[idx]=a[idx]-b[idx];
+  }
+}
 
-__global__ void vector_sub_kernel(half *a, half *b, half *c, int N) {
+__global__ void vector_sub_fp32x4_kernal(float *a,float *b,float *c,int N){
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int idx = (blockDim.x*blockIdx.x+threadIdx.x)*4;
+  
+  if (idx + 3 < N) {
+        float4 va = FLOAT4(a[idx]);
+        float4 vb = FLOAT4(b[idx]);
+
+        float4 vc;
+        vc.x = va.x - vb.x;
+        vc.y = va.y - vb.y;
+        vc.z = va.z - vb.z;
+        vc.w = va.w - vb.w;
+
+        FLOAT4(c[idx]) = vc;
+    } else {
+        // 处理尾部不足 4 个元素的情况
+        for (int i = idx; i < N; ++i) {
+            c[i] = a[i] - b[i];
+        }
+    }
+}
+
+__global__ void vector_sub_fp32x4_pack_kernal(float *a,float *b,float *c,int N){
+  int tid = threadIdx.x;
+  int bid = blockIdx.x;
+  int idx = (blockDim.x*blockIdx.x+threadIdx.x)*4;.
+  if (idx + 3 < N) {
+    float4 va = LDST128BITS(a[idx]);
+    float4 vb = LDST128BITS(b[idx]);
+    float4 vc;
+    vc.x = va.x - vb.x;
+    vc.y = va.y - vb.y;
+    vc.z = va.z - vb.z;
+    vc.w = va.w - vb.w;
+    LDST128BITS(c[idx])=LDST128BITS(vc);
+    } else {
+        // 处理尾部不足 4 个元素的情况
+        for (int i = idx; i < N; ++i) {
+            c[i] = a[i] - b[i];
+        }
+    }
+}
+
+
+__global__ void vector_sub_kernal(half *a, half *b, half *c, int N) {
     int tid = threadIdx.x; // 0..K-1
     int bid = blockIdx.x;  // 0..N-1
     int idx = bid * blockDim.x + threadIdx.x;
