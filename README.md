@@ -1,5 +1,10 @@
 # CUDAHannis
 
+<p align="center">
+  <img src="icon.png" width="220" alt="CUDAHannis"/>
+</p>
+
+
 CUDAHannis 是一个用于学习、实现和验证自定义算子的项目，重点覆盖 PyTorch reference、Triton kernel 与 CUDA extension 的对比实现。仓库中的算子实现集中在 `kernels/` 目录，各算子的基准测试通常放在对应目录的 `benchmark.py` 中。
 
 当前已整理的算子包括：
@@ -12,6 +17,30 @@ CUDAHannis 是一个用于学习、实现和验证自定义算子的项目，重
 - sum reduction：PyTorch reference、Triton、CUDA extension。
 - NVFP4-style quantization：PyTorch reference、Triton、CUDA extension。
 - fake-FP8 causal FlashAttention forward：PyTorch reference、Triton、CUDA extension。
+
+## 快速安装
+
+> 面向 agent 的「先检测本机已有环境、再按需安装」完整流程见 [`ENVIRONMENT.md`](./ENVIRONMENT.md)。以下是最小化快速上手。
+
+**前置要求**：NVIDIA GPU + 驱动、CUDA Toolkit（`nvcc`）、Python 3.9–3.12、g++。
+
+```bash
+# 1. 创建环境（canonical 名 cudahannis；本机已有满足要求的环境可直接复用，见 ENVIRONMENT.md）
+conda create -n cudahannis python=3.12 -y
+conda activate cudahannis
+
+# 2. 安装 CUDA 版 PyTorch（按本机 CUDA 选 cuXXX wheel，默认 cu126）
+pip install torch --index-url https://download.pytorch.org/whl/cu126
+
+# 3. 安装 Triton 与构建工具
+pip install triton ninja cmake
+
+# 4. 验证
+python -c "import torch,triton; assert torch.cuda.is_available(); print('OK', torch.__version__, triton.__version__)"
+
+# 5. 跑一个算子（首次会 JIT 编译 .cu，之后命中 ~/.cache/torch_extensions 缓存）
+cd kernels/a06_gelu && python benchmark.py
+```
 
 ## CUDA Kernel 列表
 

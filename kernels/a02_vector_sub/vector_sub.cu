@@ -17,8 +17,9 @@
 #define BFLOAT2(value) (reinterpret_cast<__nv_bfloat162 *>(&(value))[0])
 #define LDST128BITS(value) (reinterpret_cast<float4 *>(&(value))[0])
 
+#define BLOCK_SIZE 256
 
-__global__ void vector_sub_fp32_kernal(float *a,float *b,float* c,int N){
+__global__ void vector_sub_fp32_kernel(float *a,float *b,float* c,int N){
   int tid = threadIdx.x;
   int bid = blockIdx.x;
   int idx = bid*blockDim.x+tid;
@@ -27,7 +28,7 @@ __global__ void vector_sub_fp32_kernal(float *a,float *b,float* c,int N){
   }
 }
 
-__global__ void vector_sub_fp32x4_kernal(float *a,float *b,float *c,int N){
+__global__ void vector_sub_fp32x4_kernel(float *a,float *b,float *c,int N){
   int tid = threadIdx.x;
   int bid = blockIdx.x;
   int idx = (blockDim.x*blockIdx.x+threadIdx.x)*4;
@@ -54,7 +55,7 @@ __global__ void vector_sub_fp32x4_kernal(float *a,float *b,float *c,int N){
 __global__ void vector_sub_fp32x4_pack_kernal(float *a,float *b,float *c,int N){
   int tid = threadIdx.x;
   int bid = blockIdx.x;
-  int idx = (blockDim.x*blockIdx.x+threadIdx.x)*4;.
+  int idx = (blockDim.x*blockIdx.x+threadIdx.x)*4;
   if (idx + 3 < N) {
     float4 va = LDST128BITS(a[idx]);
     float4 vb = LDST128BITS(b[idx]);
@@ -73,7 +74,7 @@ __global__ void vector_sub_fp32x4_pack_kernal(float *a,float *b,float *c,int N){
 }
 
 
-__global__ void vector_sub_kernal(half *a, half *b, half *c, int N) {
+__global__ void vector_sub_kernel(half *a, half *b, half *c, int N) {
     int tid = threadIdx.x; // 0..K-1
     int bid = blockIdx.x;  // 0..N-1
     int idx = bid * blockDim.x + threadIdx.x;

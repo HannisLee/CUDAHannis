@@ -43,6 +43,28 @@ __global__ void sum_v2_kernel(const float *x, float *y, int N) {
   }
 }
 
+
+
+// fp16 输入的 block 规约：加载 half → 转 fp32 累加 → atomicAdd 回 half 输出
+__global__ void sum_fp16_v2_kernal(const half* x, half* y, int N){
+  int tid = threadIdx.x;
+  int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  __shared__ float input_s[BLOCK_SIZE];
+  input_s[tid] = (idx < N) ? __half2float(x[idx]) : 0.0f;
+  __syncthreads();
+  for (int offset = blockDim.x >> 1; offset > 0; offset >>= 1) {
+    if (tid < offset) {
+      input_s[tid] += input_s[tid + offset];
+    }
+    __syncthreads();
+  }
+  if (tid == 0) {
+    atomicAdd(y, __float2half(input_s[0]));
+  }
+}
+
+//warp 规约,但是blocj必须2^N次 
 __global__ void sum_v3_kernel(const float *x, float *y, int N) {
   __shared__ float s_y[32];
 
@@ -52,7 +74,7 @@ __global__ void sum_v3_kernel(const float *x, float *y, int N) {
 
   float val = (idx < N) ? x[idx] : 0.0f;
 
-#pragma unroll
+  #pragma unroll
   for (int offset = WARP_SIZE >> 1; offset > 0; offset >>= 1) {
     val += __shfl_down_sync(0xFFFFFFFF, val, offset);
   }
@@ -66,7 +88,7 @@ __global__ void sum_v3_kernel(const float *x, float *y, int N) {
     int warp_num = blockDim.x / WARP_SIZE;
     val = (lane_id < warp_num) ? s_y[lane_id] : 0.0f;
 
-#pragma unroll
+    #pragma unroll
     for (int offset = WARP_SIZE >> 1; offset > 0; offset >>= 1) {
       val += __shfl_down_sync(0xFFFFFFFF, val, offset);
     }
@@ -76,6 +98,41 @@ __global__ void sum_v3_kernel(const float *x, float *y, int N) {
     }
   }
 }
+
+// fp16 输入的 warp 规约：加载 half → 转 fp32 用 __shfl_down_sync 规约 → atomicAdd 回 half
+// 注意：__shfl_down_sync 不直接支持 half，因此规约在 fp32 下进行
+__global__ void sum_fp16_v3_kernal(const half* x, half* y, int N){
+  __shared__ float s_y[32];
+  int idx = blockDim.x * blockIdx.x + threadIdx.x;
+  int warp_id = threadIdx.x / WARP_SIZE;
+  int lane_id = threadIdx.x % WARP_SIZE;
+
+  float val = (idx < N) ? __half2float(x[idx]) : 0.0f;
+  #pragma unroll
+  for (int offset = WARP_SIZE >> 1; offset > 0; offset >>= 1) {
+    val += __shfl_down_sync(0xFFFFFFFF, val, offset);
+  }
+
+  if (lane_id == 0) {
+    s_y[warp_id] = val;
+  }
+  __syncthreads();
+
+  if (warp_id == 0) {
+    int warp_num = blockDim.x / WARP_SIZE;
+    val = (lane_id < warp_num) ? s_y[lane_id] : 0.0f;
+
+    #pragma unroll
+    for (int offset = WARP_SIZE >> 1; offset > 0; offset >>= 1) {
+      val += __shfl_down_sync(0xFFFFFFFF, val, offset);
+    }
+
+    if (lane_id == 0) {
+      atomicAdd(y, __float2half(val));
+    }
+  }
+}
+
 
 __global__ void sum_v4_kernel(const float *x, float *y, int N) {
   __shared__ float s_y[32];
