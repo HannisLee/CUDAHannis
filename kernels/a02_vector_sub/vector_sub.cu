@@ -323,6 +323,35 @@ void check_vector_sub_f16_inputs(
 }
 
 
+// ============================================================================
+// Common input check (fp32)
+// ============================================================================
+//
+// fp32 版本的输入检查，要求和 fp16 版本完全一致，
+// 只是把 dtype 从 torch.float16 换成 torch.float32。
+// ============================================================================
+
+void check_vector_sub_f32_inputs(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& c
+) {
+  CHECK_INPUT(a);
+  CHECK_INPUT(b);
+  CHECK_INPUT(c);
+
+  CHECK_TORCH_TENSOR_DTYPE(a, torch::kFloat32);
+  CHECK_TORCH_TENSOR_DTYPE(b, torch::kFloat32);
+  CHECK_TORCH_TENSOR_DTYPE(c, torch::kFloat32);
+
+  CHECK_TORCH_TENSOR_SHAPE(a, b);
+  CHECK_TORCH_TENSOR_SHAPE(a, c);
+
+  CHECK_TORCH_TENSOR_DEVICE(a, b);
+  CHECK_TORCH_TENSOR_DEVICE(a, c);
+}
+
+
 
 // ============================================================================
 // VectorSub launch macros
@@ -438,6 +467,65 @@ void check_vector_sub_f16_inputs(
   LAUNCH_VECTOR_SUB_F16X8_PACK_KERNEL(N)
 
 
+// ----------------------------------------------------------------------------
+// fp32 scalar launch
+// 每个 thread 处理 1 个 float
+// ----------------------------------------------------------------------------
+
+#define LAUNCH_VECTOR_SUB_F32_KERNEL(N)                                      \
+  vector_sub_fp32_kernel<<<grid, block>>>(                                   \
+      reinterpret_cast<float*>(a.data_ptr()),                                \
+      reinterpret_cast<float*>(b.data_ptr()),                                \
+      reinterpret_cast<float*>(c.data_ptr()),                                \
+      (N)                                                                    \
+  );
+
+#define DISPATCH_VECTOR_SUB_F32_KERNEL(N)                                    \
+  dim3 block(VECTOR_SUB_THREADS);                                            \
+  dim3 grid(((N) + VECTOR_SUB_THREADS - 1) / VECTOR_SUB_THREADS);            \
+  LAUNCH_VECTOR_SUB_F32_KERNEL(N)
+
+
+// ----------------------------------------------------------------------------
+// fp32x4 launch
+// 每个 thread 处理 4 个 float = 1 个 float4
+// ----------------------------------------------------------------------------
+
+#define LAUNCH_VECTOR_SUB_F32X4_KERNEL(N)                                    \
+  vector_sub_fp32x4_kernel<<<grid, block>>>(                                 \
+      reinterpret_cast<float*>(a.data_ptr()),                                \
+      reinterpret_cast<float*>(b.data_ptr()),                                \
+      reinterpret_cast<float*>(c.data_ptr()),                                \
+      (N)                                                                    \
+  );
+
+#define DISPATCH_VECTOR_SUB_F32X4_KERNEL(N)                                  \
+  dim3 block(VECTOR_SUB_THREADS);                                            \
+  int packs = ((N) + 4 - 1) / 4;                                             \
+  dim3 grid((packs + VECTOR_SUB_THREADS - 1) / VECTOR_SUB_THREADS);          \
+  LAUNCH_VECTOR_SUB_F32X4_KERNEL(N)
+
+
+// ----------------------------------------------------------------------------
+// fp32x4 pack launch
+// 每个 thread 处理 4 个 float，并用 128-bit load/store
+// ----------------------------------------------------------------------------
+
+#define LAUNCH_VECTOR_SUB_F32X4_PACK_KERNEL(N)                               \
+  vector_sub_fp32x4_pack_kernal<<<grid, block>>>(                            \
+      reinterpret_cast<float*>(a.data_ptr()),                                \
+      reinterpret_cast<float*>(b.data_ptr()),                                \
+      reinterpret_cast<float*>(c.data_ptr()),                                \
+      (N)                                                                    \
+  );
+
+#define DISPATCH_VECTOR_SUB_F32X4_PACK_KERNEL(N)                             \
+  dim3 block(VECTOR_SUB_THREADS);                                            \
+  int packs = ((N) + 4 - 1) / 4;                                             \
+  dim3 grid((packs + VECTOR_SUB_THREADS - 1) / VECTOR_SUB_THREADS);          \
+  LAUNCH_VECTOR_SUB_F32X4_PACK_KERNEL(N)
+
+
 // ============================================================================
 // VectorSub launcher wrappers
 // ============================================================================
@@ -508,6 +596,40 @@ void vector_sub_f16x8_pack(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
 }
 
 
+void vector_sub_f32(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
+  check_vector_sub_f32_inputs(a, b, c);
+
+  const int N = static_cast<int>(a.numel());
+  if (N == 0) {
+    return;
+  }
+
+  DISPATCH_VECTOR_SUB_F32_KERNEL(N)
+}
+
+void vector_sub_f32x4(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
+  check_vector_sub_f32_inputs(a, b, c);
+
+  const int N = static_cast<int>(a.numel());
+  if (N == 0) {
+    return;
+  }
+
+  DISPATCH_VECTOR_SUB_F32X4_KERNEL(N)
+}
+
+void vector_sub_f32x4_pack(torch::Tensor a, torch::Tensor b, torch::Tensor c) {
+  check_vector_sub_f32_inputs(a, b, c);
+
+  const int N = static_cast<int>(a.numel());
+  if (N == 0) {
+    return;
+  }
+
+  DISPATCH_VECTOR_SUB_F32X4_PACK_KERNEL(N)
+}
+
+
 // ============================================================================
 // Return versions
 // ============================================================================
@@ -561,6 +683,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   TORCH_BINDING_COMMON_EXTENSION(vector_sub_f16x4)
   TORCH_BINDING_COMMON_EXTENSION(vector_sub_f16x8)
   TORCH_BINDING_COMMON_EXTENSION(vector_sub_f16x8_pack)
+
+  TORCH_BINDING_COMMON_EXTENSION(vector_sub_f32)
+  TORCH_BINDING_COMMON_EXTENSION(vector_sub_f32x4)
+  TORCH_BINDING_COMMON_EXTENSION(vector_sub_f32x4_pack)
 
   TORCH_BINDING_COMMON_EXTENSION(vector_sub_f16_return)
   TORCH_BINDING_COMMON_EXTENSION(vector_sub_f16x2_return)

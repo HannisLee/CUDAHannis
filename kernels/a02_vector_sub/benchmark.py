@@ -94,6 +94,26 @@ def bench_shape(N: int, K: int):
     run_benchmark(lib.vector_sub_f16x2, a, b, "f16x2", out)
     run_benchmark(lib.vector_sub_f16x8, a, b, "f16x8", out)
     run_benchmark(lib.vector_sub_f16x8_pack, a, b, "f16x8_pack", out)
+
+    from vector_sub_triton import vector_sub_triton
+    run_benchmark(vector_sub_triton, a, b, "triton")
+    run_benchmark(naive_vector_sub, a, b, "torch")
+
+    print("-" * 85)
+
+
+def bench_shape_f32(N: int, K: int):
+    print("-" * 85)
+    print(" " * 40 + f"N={N}, K={K}, dtype=fp32")
+    print("-" * 85)
+
+    a = torch.randn((N, K), device="cuda", dtype=torch.float32).contiguous()
+    b = torch.randn((N, K), device="cuda", dtype=torch.float32).contiguous()
+    out = torch.zeros_like(a).contiguous()
+
+    run_benchmark(lib.vector_sub_f32, a, b, "f32", out)
+    run_benchmark(lib.vector_sub_f32x4, a, b, "f32x4", out)
+    run_benchmark(lib.vector_sub_f32x4_pack, a, b, "f32x4_pack", out)
     from vector_sub_triton import vector_sub_triton
     run_benchmark(vector_sub_triton, a, b, "triton")
     run_benchmark(naive_vector_sub, a, b, "torch")
@@ -102,8 +122,8 @@ def bench_shape(N: int, K: int):
 
 
 if __name__ == "__main__":
-    bench_shape(4096, 512)
-    bench_shape(4096, 1024)
-    bench_shape(4096, 2048)
-    bench_shape(4096, 4096)
-    bench_shape(4096, 8192)
+    shapes = [(4096, 512), (4096, 1024), (4096, 2048), (4096, 4096), (4096, 8192)]
+    for N, K in shapes:
+        bench_shape(N, K)
+    for N, K in shapes:
+        bench_shape_f32(N, K)
