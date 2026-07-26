@@ -2,6 +2,8 @@ import time
 from typing import Optional
 import torch
 from torch.utils.cpp_extension import load
+import torch.nn.functional as F
+
 torch.set_grad_enabled(False)
 
 lib = load(
@@ -21,7 +23,7 @@ lib = load(
 )
 
 
-
+    
 
 
 def run_benchmark(
@@ -42,7 +44,7 @@ def run_benchmark(
     # warmup
     if has_out:
         for _ in range(warmup):
-            perf_func(a,b, out)
+            perf_func(a, out)
     else:
         for _ in range(warmup):
             out = perf_func(a, b)
@@ -53,7 +55,7 @@ def run_benchmark(
 
     if has_out:
         for _ in range(iters):
-            perf_func(a,b, out)
+            perf_func(a, out)
     else:
         for _ in range(iters):
             out = perf_func(a, b)
@@ -83,14 +85,14 @@ def naive_vector_sub(a: torch.Tensor, b: torch.Tensor):
 
 def bench_shape(N: int, K: int):
     print("-" * 85)
-    print(" " * 40 + f"N={N}, K={K}, dtype=fp16")
+    print(" " * 40 + f"N={N}, K={K}, dtype=fp32")
     print("-" * 85)
 
     a = torch.randn((N, K), device="cuda", dtype=torch.float32).contiguous()
     b = torch.randn((N, K), device="cuda", dtype=torch.float32).contiguous()
     out = torch.zeros_like(a).contiguous()
 
-    run_benchmark(lib.coding1, a, b, "f16_out", out)
+    run_benchmark(lib.coding1, a, b, "cuda_out", out)
     
 
 
