@@ -9,6 +9,10 @@ lib = load(
     sources=["vector_sub.cu"],
     extra_cuda_cflags=[
         "-O3",
+        # parvati: nvidia-cuda-nvcc=13.2 与 cuda-runtime headers=13.0 小版本不一致，
+        # 新版 CCCL(cuda_toolkit.h)强校验会报 "compiler and toolkit headers
+        # incompatible"，按其官方说明禁用该兼容性检查(nvcc 13.2 向后兼容 runtime 13.0)
+        "-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK",
         "-U__CUDA_NO_HALF_OPERATORS__",
         "-U__CUDA_NO_HALF_CONVERSIONS__",
         "-U__CUDA_NO_HALF2_OPERATORS__",
